@@ -7,7 +7,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="MassTransit" Version="8.3.6" />
+    <PackageReference Include="MassTransit.RabbitMQ" Version="8.3.6" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.13" />
+    <PackageReference Include="minio" Version="6.0.4" />
+    <PackageReference Include="minio.AspNetCore" Version="6.0.1" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
   </ItemGroup>
 

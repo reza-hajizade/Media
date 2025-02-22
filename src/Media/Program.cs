@@ -1,9 +1,19 @@
+using MassTransit;
+using Media.Infrastructure;
+using Media.Infrastructure.IntegrationEvents;
+using Microsoft.AspNetCore.Mvc;
+using Minio;
+using Minio.DataModel.Args;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+
+
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.BrokerConfigure();
+
 
 var app = builder.Build();
 
@@ -16,29 +26,48 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
 
-app.MapGet("/weatherforecast", () =>
+
+app.MapPost("/{bucket_name}/{catalog_id}", async(
+    [FromRoute(Name ="bucket_name")] string bucketName,
+    [FromRoute(Name ="catalog_id")] string catalogId,
+    IFormFile formFile, 
+    IPublishEndpoint publisher, 
+    IConfiguration configuration) =>
 {
-    var forecast = Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast")
-.WithOpenApi();
+
+    var endpoint = configuration["MinioStorage:MinioEndpoint"];
+    var accessKey = configuration["MinioStorage:AccessKey"];
+    var secretKey = configuration["MinioStorage:SecretKey"];
+
+    var minio = new MinioClient()
+                         .WithEndpoint(endpoint)
+                         .WithCredentials(accessKey, secretKey)
+                         .Build();
+
+
+    var putObjectOrgs = new PutObjectArgs()
+                          .WithBucket(bucketName)
+                          .WithObject(formFile.Name)
+                          .WithContentType(formFile.ContentType)
+                          .WithStreamData(formFile.OpenReadStream())
+                          .WithObjectSize(formFile.Length);
+
+
+    try
+    {
+        await minio.PutObjectAsync(putObjectOrgs);
+        string url = $"{endpoint}/{bucketName}/{formFile.Name}";
+        await publisher.Publish(new MediaUploadedEvent(formFile.FileName, url, catalogId, DateTime.UtcNow));
+    }
+    catch (Exception)
+    {
+
+        throw;
+    }
+
+}).DisableAntiforgery();
+
 
 app.Run();
 
-internal record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
